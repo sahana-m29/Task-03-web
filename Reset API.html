@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Books API — Frontend Tester</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #222; }
+    body { max-width: 900px; margin: 32px auto; padding: 16px; line-height: 1.45; }
+    h1 { font-size: 1.6rem; margin-bottom: 4px; }
+    p.lead { color: #555; margin-top: 0; margin-bottom: 18px; }
+    .grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+    .card { background:#fff; border:1px solid #e4e4e8; padding:12px; border-radius:8px; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+    label { display:block; font-size:0.85rem; color:#444; margin-bottom:6px; }
+    input[type="text"], input[type="number"] { width:100%; padding:8px 10px; border:1px solid #d0d0d5; border-radius:6px; }
+    button { padding:8px 12px; border-radius:8px; border: none; background:#2563eb; color:white; cursor:pointer; }
+    button.secondary { background:#6b7280; }
+    .full { grid-column: 1 / -1; }
+    table { width:100%; border-collapse: collapse; margin-top:10px; }
+    th, td { border:1px solid #eef0f3; padding:8px 10px; text-align:left; }
+    th { background:#fafafa; font-weight:600; }
+    pre { background:#0f172a; color:#fff; padding:10px; border-radius:6px; overflow:auto; }
+    .hint { font-size:0.9rem; color:#666; margin-top:6px; }
+    .status { margin-top:8px; font-weight:600; }
+    @media (max-width:700px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Books API — Frontend Tester</h1>
+  <p class="lead">A tiny single-file UI to call your Node/Express API at <code>http://localhost:3000</code>. Use the controls below to GET, POST, PUT and DELETE books.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>GET all books</h3>
+      <p class="hint">Fetches <code>GET /books</code> and displays results.</p>
+      <button id="btn-get">Fetch Books</button>
+      <div class="status" id="get-status"></div>
+    </div>
+
+    <div class="card">
+      <h3>POST a new book</h3>
+      <label>Title
+        <input id="post-title" type="text" placeholder="Book title">
+      </label>
+      <label>Author
+        <input id="post-author" type="text" placeholder="Author name">
+      </label>
+      <button id="btn-post">Add Book</button>
+      <div class="status" id="post-status"></div>
+    </div>
+
+    <div class="card">
+      <h3>PUT — update book</h3>
+      <label>Book ID
+        <input id="put-id" type="number" min="1" placeholder="e.g. 1">
+      </label>
+      <label>New Title
+        <input id="put-title" type="text" placeholder="New title (leave blank to keep)">
+      </label>
+      <label>New Author
+        <input id="put-author" type="text" placeholder="New author (leave blank to keep)">
+      </label>
+      <button id="btn-put">Update Book</button>
+      <div class="status" id="put-status"></div>
+    </div>
+
+    <div class="card">
+      <h3>DELETE — remove book</h3>
+      <label>Book ID
+        <input id="delete-id" type="number" min="1" placeholder="ID to delete">
+      </label>
+      <button id="btn-delete" class="secondary">Delete Book</button>
+      <div class="status" id="delete-status"></div>
+    </div>
+
+    <div class="card full">
+      <h3>Response / Books</h3>
+      <div id="results"></div>
+      <table id="books-table" style="display:none;">
+        <thead>
+          <tr><th>ID</th><th>Title</th><th>Author</th></tr>
+        </thead>
+        <tbody id="books-body"></tbody>
+      </table>
+      <pre id="raw-output" style="display:none;"></pre>
+    </div>
+  </div>
+
+  <hr style="margin:20px 0">
+
+  <p class="hint">Notes:</p>
+  <ul>
+    <li class="hint">Make sure your Node server is running on <code>http://localhost:3000</code>.</li>
+    <li class="hint">If requests are blocked by the browser, enable CORS in your Express server (install and use the <code>cors</code> package) or run the HTML from a server (Live Server).</li>
+  </ul>
+
+  <script>
+    // Base API URL (change if your server runs elsewhere)
+    const API = "http://localhost:3000";
+
+    // Utility: show JSON in readable form
+    function showRaw(json) {
+      const pre = document.getElementById("raw-output");
+      pre.style.display = "block";
+      pre.textContent = JSON.stringify(json, null, 2);
+    }
+
+    // Utility: render books to table
+    function renderBooks(books) {
+      const table = document.getElementById("books-table");
+      const body = document.getElementById("books-body");
+      body.innerHTML = "";
+      if (!Array.isArray(books) || books.length === 0) {
+        table.style.display = "none";
+        document.getElementById("results").textContent = "No books found.";
+        return;
+      }
+      books.forEach(b => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${b.id}</td><td>${escapeHtml(b.title)}</td><td>${escapeHtml(b.author)}</td>`;
+        body.appendChild(tr);
+      });
+      document.getElementById("results").textContent = "";
+      table.style.display = "table";
+    }
+
+    // Simple escaping
+    function escapeHtml(s) {
+      return String(s || "").replace(/[&<>"']/g, function(m) {
+        return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m];
+      });
+    }
+
+    // GET /books
+    document.getElementById("btn-get").addEventListener("click", async () => {
+      setStatus("get-status", "Fetching...");
+      try {
+        const res = await fetch(API + "/books");
+        const data = await res.json();
+        showRaw(data);
+        renderBooks(data);
+        setStatus("get-status", "Fetched ✅");
+      } catch (err) {
+        setStatus("get-status", "Error: " + err.message);
+      }
+    });
+
+    // POST /books
+    document.getElementById("btn-post").addEventListener("click", async () => {
+      const title = document.getElementById("post-title").value.trim();
+      const author = document.getElementById("post-author").value.trim();
+      if (!title || !author) {
+        setStatus("post-status", "Title & author required");
+        return;
+      }
+      setStatus("post-status", "Adding...");
+      try {
+        const res = await fetch(API + "/books", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, author })
+        });
+        const data = await res.json();
+        showRaw(data);
+        setStatus("post-status", "Added ✅ (ID: " + (data.id ?? "unknown") + ")");
+        // Refresh list
+        document.getElementById("btn-get").click();
+      } catch (err) {
+        setStatus("post-status", "Error: " + err.message);
+      }
+    });
+
+    // PUT /books/:id
+    document.getElementById("btn-put").addEventListener("click", async () => {
+      const id = parseInt(document.getElementById("put-id").value, 10);
+      const title = document.getElementById("put-title").value.trim();
+      const author = document.getElementById("put-author").value.trim();
+      if (!id) {
+        setStatus("put-status", "Valid ID required");
+        return;
+      }
+      const payload = {};
+      if (title) payload.title = title;
+      if (author) payload.author = author;
+      if (Object.keys(payload).length === 0) {
+        setStatus("put-status", "At least one of title or author required");
+        return;
+      }
+      setStatus("put-status", "Updating...");
+      try {
+        const res = await fetch(API + "/books/" + id, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        showRaw(data);
+        setStatus("put-status", res.ok ? "Updated ✅" : "Error: " + (data.message || res.statusText));
+        document.getElementById("btn-get").click();
+      } catch (err) {
+        setStatus("put-status", "Error: " + err.message);
+      }
+    });
+
+    // DELETE /books/:id
+    document.getElementById("btn-delete").addEventListener("click", async () => {
+      const id = parseInt(document.getElementById("delete-id").value, 10);
+      if (!id) {
+        setStatus("delete-status", "Valid ID required");
+        return;
+      }
+      if (!confirm("Delete book with ID " + id + " ?")) return;
+      setStatus("delete-status", "Deleting...");
+      try {
+        const res = await fetch(API + "/books/" + id, { method: "DELETE" });
+        const data = await res.json();
+        showRaw(data);
+        setStatus("delete-status", res.ok ? "Deleted ✅" : "Error: " + (data.message || res.statusText));
+        document.getElementById("btn-get").click();
+      } catch (err) {
+        setStatus("delete-status", "Error: " + err.message);
+      }
+    });
+
+    // small helper to set status text
+    function setStatus(id, text) {
+      document.getElementById(id).textContent = text;
+    }
+
+    // Optional: auto-fetch on load
+    // window.addEventListener("load", () => document.getElementById("btn-get").click());
+  </script>
+</body>
+</html>
